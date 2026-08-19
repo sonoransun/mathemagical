@@ -2,6 +2,8 @@
 
 A creative exploration of the origin of mathematics, the intersection with musical and visual arts, and the theoretical future of the boundaries of pure math exploration!
 
+**Live demo:** https://sonoransun.github.io/mathemagical/ ♾️
+
 ## What this is
 
 **Mathemagical** is an *essay you can play*: a single scrolling page of prose whose
