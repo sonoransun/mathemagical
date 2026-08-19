@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mathemagical — self-tests</title>
+  <link rel="stylesheet" href="css/main.css">
+  <style>
+    body { padding: 2rem; font-size: 0.95rem; }
+    h1 { font-variant: small-caps; letter-spacing: 0.1em; }
+    .t { font-family: var(--mono); padding: 0.15rem 0.4rem; }
+    .t.pass::before { content: "✓ "; color: var(--verdant); }
+    .t.fail::before { content: "✗ "; color: var(--crimson); }
+    .t.fail { color: var(--crimson); }
+    .suite { color: var(--gold); margin: 1.2rem 0 0.3rem; font-variant: small-caps; letter-spacing: 0.12em; }
+    #summary { font-family: var(--mono); margin-top: 2rem; font-size: 1.1rem; }
+  </style>
+</head>
+<body>
+  <h1>Mathemagical self-tests</h1>
+  <div id="out"></div>
+  <div id="summary">running…</div>
+
+  <script type="module">
+    import * as m from './js/core/math.js';
+    import { MANIFEST } from './js/manifest.js';
+
+    const out = document.getElementById('out');
+    let pass = 0, fail = 0;
+    let suiteEl = null;
+
+    function suite(name) {
+      suiteEl = document.createElement('div');
+      suiteEl.className = 'suite';
+      suiteEl.textContent = name;
+      out.appendChild(suiteEl);
+    }
+    function check(name, fn) {
+      const div = document.createElement('div');
+      div.className = 't';
+      try {
+        const r = fn();
+        if (r === false) throw new Error('returned false');
+        div.classList.add('pass'); div.textContent = name; pass++;
+      } catch (e) {
+        div.classList.add('fail'); div.textContent = `${name} — ${e.message}`; fail++;
+      }
+      out.appendChild(div);
+    }
+    async function checkAsync(name, fn) {
+      const div = document.createElement('div');
+      div.className = 't';
+      try {
+        const r = await fn();
+        if (r === false) throw new Error('returned false');
+        div.classList.add('pass'); div.textContent = name; pass++;
+      } catch (e) {
+        div.classList.add('fail'); div.textContent = `${name} — ${e.message}`; fail++;
+      }
+      out.appendChild(div);
+    }
+    const eq = (a, b) => { if (a !== b) throw new Error(`${a} !== ${b}`); };
+    const near = (a, b, t = 1e-9) => { if (Math.abs(a - b) > t) throw new Error(`${a} !≈ ${b}`); };
+
+    // ---------- core math ----------
+    suite('core/math');
+    check('gcd(48,18) = 6', () => eq(m.gcd(48, 18), 6));
+    check('Frac: 1/2 + 1/4 = 3/4', () => eq(m.Frac.of(1,2).add(m.Frac.of(1,4)).toString(), '3/4'));
+    check('Frac exactness: 1/3 * 3 = 1', () => eq(m.Frac.of(1,3).mul(m.Frac.of(3)).toString(), '1'));
+    check('convergents of log2(3/2) include 7/12 and 31/53', () => {
+      const cv = m.convergents(m.continuedFraction(Math.log2(1.5), 8)).map(([p,q]) => `${p}/${q}`);
+      if (!cv.includes('7/12') || !cv.includes('31/53')) throw new Error(cv.join(' '));
+    });
+    check('Pell pairs satisfy p²−2q² = ±1 (BigInt exact)', () => {
+      for (const [p, q] of m.pellPairs(20)) {
+        const v = p * p - 2n * q * q;
+        if (v !== 1n && v !== -1n) throw new Error(`${p},${q} -> ${v}`);
+      }
+    });
+    check('DFT ∘ IDFT roundtrip < 1e-12', () => {
+      const pts = Array.from({ length: 64 }, (_, i) => ({ re: Math.cos(i * 0.3), im: Math.sin(i * 0.7) }));
+      const back = m.idft(m.dft(pts));
+      pts.forEach((p, i) => { near(p.re, back[i].re, 1e-12); near(p.im, back[i].im, 1e-12); });
+    });
+    check('E(3,8) is a rotation of tresillo x..x..x.', () => {
+      const r = m.euclidRhythm(3, 8).map(b => b ? 'x' : '.').join('');
+      const target = 'x..x..x.';
+      const rots = Array.from({ length: 8 }, (_, i) => target.slice(i) + target.slice(0, i));
+      if (!rots.includes(r)) throw new Error(r);
+    });
+    check('E(k,n) is maximally even (≤2 gap sizes, differ by 1)', () => {
+      for (let n = 2; n <= 16; n++) for (let k = 1; k < n; k++) {
+        const hits = [];
+        m.euclidRhythm(k, n).forEach((b, i) => b && hits.push(i));
+        const gaps = hits.map((h, i) => ((hits[(i + 1) % hits.length] - h) + n) % n || n);
+        const kinds = [...new Set(gaps)].sort((a, b) => a - b);
+        if (kinds.length > 2 || (kinds.length === 2 && kinds[1] - kinds[0] !== 1)) throw new Error(`E(${k},${n})`);
+      }
+    });
+    check('1/3 terminates in base 60 (;20), repeats in base 10', () => {
+      const b60 = m.baseExpansion(1, 3, 60);
+      const b10 = m.baseExpansion(1, 3, 10, 12);
+      if (!b60.terminates || b60.digits[0] !== 20) throw new Error(JSON.stringify(b60));
+      if (b10.terminates) throw new Error('1/3 should not terminate in base 10');
+    });
+    check('regular numbers: 48 yes, 42 no', () => { eq(m.isRegular(48), true); eq(m.isRegular(42), false); });
+    check('ordinal CNF prints and compares', () => {
+      const o = m.ordSumOfOmegaPows([{ terms: [[1, 1]] }, 1, 1, 0, 0, 0]);   // ω^ω + ω·2 + 3
+      eq(m.ordToString(o), 'ω^ω + ω·2 + 3');
+      eq(m.ordCmp(o, 5), 1);
+      eq(m.ordCmp(3, o), -1);
+    });
+    check('cents(3/2) ≈ 701.955', () => near(m.cents(1.5), 701.955, 0.001));
+
+    // ---------- exhibit modules: shape ----------
+    suite('exhibit modules (contract shape)');
+    const loaded = {};
+    for (const entry of MANIFEST) {
+      await checkAsync(`${entry.id} imports; id/movement/init/prose valid`, async () => {
+        const mod = await import(entry.path.replace('./', './js/'));
+        loaded[entry.id] = mod;
+        eq(mod.default.id, entry.id);
+        eq(mod.default.movement, entry.movement);
+        if (typeof mod.default.init !== 'function') throw new Error('init missing');
+        if (typeof mod.default.prose !== 'string' || mod.default.prose.length < 200)
+          throw new Error('prose missing/short');
+      });
+    }
+
+    // ---------- exhibit deep tests (filled in as modules land) ----------
+    suite('exhibit logic (_test hooks)');
+    for (const entry of MANIFEST) {
+      const mod = loaded[entry.id];
+      if (!mod) continue;
+      if (mod._test && typeof mod._test.selfTest === 'function') {
+        await checkAsync(`${entry.id}._test.selfTest()`, () => mod._test.selfTest());
+      }
+    }
+    // Integrator-authored deep assertions:
+    if (loaded.rosetta?. _test?.pointCountAp && loaded.rosetta?._test?.etaCoefficients) {
+      await checkAsync('rosetta: a_p anchors a2=−2 a3=−1 a5=1 a7=−2', async () => {
+        const T = loaded.rosetta._test;
+        const eta = T.etaCoefficients(10);
+        eq(T.pointCountAp(2), -2); eq(T.pointCountAp(3), -1);
+        eq(T.pointCountAp(5), 1); eq(T.pointCountAp(7), -2);
+        eq(eta[2], -2); eq(eta[3], -1); eq(eta[5], 1); eq(eta[7], -2);
+      });
+    }
+
+    document.getElementById('summary').textContent =
+      `${pass} passed, ${fail} failed` + (fail ? ' — SEE ABOVE' : ' — all green');
+    document.getElementById('summary').style.color = fail ? '#c05b4d' : '#7fae7a';
+    window.__testResults = { pass, fail };
+  </script>
+</body>
+</html>
