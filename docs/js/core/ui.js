@@ -22,9 +22,15 @@ export function slider(parent, opts) {
   input.min = opts.min; input.max = opts.max;
   input.step = opts.step ?? 'any';
   input.value = opts.value;
+  if (opts.label) input.setAttribute('aria-label', opts.label);
   const val = el('div', 'ctl-value', wrap);
+  val.setAttribute('aria-hidden', 'true');   // the value is announced via aria-valuetext
   const fmt = opts.format || ((v) => String(v));
-  const refresh = () => { val.textContent = fmt(parseFloat(input.value)); };
+  const refresh = () => {
+    const text = String(fmt(parseFloat(input.value)));
+    val.textContent = text;
+    input.setAttribute('aria-valuetext', text);
+  };
   input.addEventListener('input', () => { refresh(); opts.onInput && opts.onInput(parseFloat(input.value)); });
   refresh();
   return {
@@ -36,28 +42,39 @@ export function slider(parent, opts) {
 
 export function button(parent, label, onClick, opts = {}) {
   const b = el('button', 'btn' + (opts.primary ? ' primary' : '') + (opts.small ? ' small' : ''), parent);
+  b.type = 'button';                          // never a form submit, wherever an exhibit puts it
   b.textContent = label;
   b.addEventListener('click', onClick);
   return b;
 }
 
 // toggle(parent, {label, value, onChange}) -> { el, get value, set(v) }
+// A real switch: a <button role="switch"> with aria-checked, so it can be
+// focused, operated with Space/Enter and announced. Same API and class names.
 export function toggle(parent, opts) {
-  const wrap = el('label', 'toggle-pill' + (opts.value ? ' on' : ''), parent);
+  const wrap = el('button', 'toggle-pill' + (opts.value ? ' on' : ''), parent);
+  wrap.type = 'button';
+  wrap.setAttribute('role', 'switch');
   const pill = el('span', 'pill', wrap);
+  pill.setAttribute('aria-hidden', 'true');
   const lab = el('span', null, wrap);
   lab.textContent = opts.label || '';
   let value = !!opts.value;
+  const sync = () => {
+    wrap.classList.toggle('on', value);
+    wrap.setAttribute('aria-checked', String(value));
+  };
   wrap.addEventListener('click', (e) => {
     e.preventDefault();
     value = !value;
-    wrap.classList.toggle('on', value);
+    sync();
     opts.onChange && opts.onChange(value);
   });
+  sync();
   return {
     el: wrap,
     get value() { return value; },
-    set(v) { value = !!v; wrap.classList.toggle('on', value); },
+    set(v) { value = !!v; sync(); },
   };
 }
 
@@ -68,8 +85,13 @@ export function stepper(parent, opts) {
   lab.textContent = opts.label || '';
   const wrap = el('div', 'stepper', wrapOuter);
   const dec = el('button', null, wrap); dec.textContent = '−';
+  dec.type = 'button';
+  dec.setAttribute('aria-label', `decrease ${opts.label || 'value'}`.trim());
   const val = el('span', 'stepper-val', wrap);
+  val.setAttribute('aria-live', 'polite');
   const inc = el('button', null, wrap); inc.textContent = '+';
+  inc.type = 'button';
+  inc.setAttribute('aria-label', `increase ${opts.label || 'value'}`.trim());
   let value = opts.value ?? opts.min ?? 0;
   const lo = opts.min ?? -Infinity, hi = opts.max ?? Infinity;
   const fmt = opts.format || ((v) => String(v));
@@ -96,6 +118,7 @@ export function select(parent, opts) {
   const lab = el('div', 'ctl-label', wrap);
   lab.textContent = opts.label || '';
   const sel = el('select', 'sel', wrap);
+  if (opts.label) sel.setAttribute('aria-label', opts.label);
   for (const o of opts.options) {
     const opt = el('option', null, sel);
     if (typeof o === 'string') { opt.value = o; opt.textContent = o; }
@@ -136,7 +159,9 @@ export function speculationPanel(parent, bodyHTML, title = 'here the ground beco
 // Quest banner: q.set('goal text'); q.done('victory text'); q.reset().
 export function questBanner(parent, text) {
   const b = el('div', 'quest-banner', parent);
+  b.setAttribute('role', 'status');
   const mark = el('span', 'quest-mark', b);
+  mark.setAttribute('aria-hidden', 'true');
   mark.textContent = '✦';
   const t = el('span', 'quest-text', b);
   t.innerHTML = text || '';

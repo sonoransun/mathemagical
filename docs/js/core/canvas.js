@@ -222,7 +222,7 @@ export function miniChart(ctx, spec) {
   }
 
   if (spec.labels) {
-    ctx.fillStyle = '#6d6a5e';
+    ctx.fillStyle = palette.inkDim;
     ctx.font = '10px ui-monospace, Menlo, monospace';
     if (spec.labels.x) ctx.fillText(spec.labels.x, x + w / 2 - ctx.measureText(spec.labels.x).width / 2, y + h + 12);
     if (spec.labels.y) { ctx.save(); ctx.translate(x - 6, y + h / 2); ctx.rotate(-Math.PI / 2); ctx.fillText(spec.labels.y, -ctx.measureText(spec.labels.y).width / 2, 0); ctx.restore(); }
@@ -258,4 +258,7 @@ export const palette = {
   gold: '#c9a959', goldBright: '#e8c87c', goldDim: '#8a7440',
   azure: '#7da7d9', azureDim: '#4a6a94',
   crimson: '#c05b4d', verdant: '#7fae7a',
+  // v2 additions (backward-compatible): Movement IV's pigment and the
+  // "where it lives now" panel; crimson legible as small text; decorative ink.
+  verdigris: '#62b3a4', crimsonBright: '#d97a68', inkGhost: '#4a4840',
 };

@@ -5,15 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mathemagical — self-tests</title>
   <link rel="stylesheet" href="css/main.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%230c0d12'/><circle cx='32' cy='32' r='23' fill='none' stroke='%23c9a959' stroke-width='3'/><rect x='15.7' y='15.7' width='32.6' height='32.6' fill='none' stroke='%23c9a959' stroke-width='2.4'/><path d='M15.7 15.7L48.3 48.3' stroke='%23d97a68' stroke-width='3'/></svg>">
   <style>
     body { padding: 2rem; font-size: 0.95rem; }
     h1 { font-variant: small-caps; letter-spacing: 0.1em; }
-    .t { font-family: var(--mono); padding: 0.15rem 0.4rem; }
+    .t { font-family: var(--mono); padding: 0.15rem 0.4rem; overflow-wrap: anywhere; }
     .t.pass::before { content: "✓ "; color: var(--verdant); }
     .t.fail::before { content: "✗ "; color: var(--crimson); }
     .t.fail { color: var(--crimson); }
     .suite { color: var(--gold); margin: 1.2rem 0 0.3rem; font-variant: small-caps; letter-spacing: 0.12em; }
     #summary { font-family: var(--mono); margin-top: 2rem; font-size: 1.1rem; }
+    @media (max-width: 40rem) { body { padding: 1.25rem 1rem; } .t { padding-inline: 0; } }
   </style>
 </head>
 <body>
@@ -61,90 +63,464 @@
     }
     const eq = (a, b) => { if (a !== b) throw new Error(`${a} !== ${b}`); };
     const near = (a, b, t = 1e-9) => { if (Math.abs(a - b) > t) throw new Error(`${a} !≈ ${b}`); };
+    // Collect problems, then fail once with all of them listed.
+    const problems = () => {
+      const list = [];
+      return { add: (msg) => list.push(msg), done() { if (list.length) throw new Error(list.join('; ')); } };
+    };
+    const isStr = (s) => typeof s === 'string' && s.trim() !== '';
+    const short = (s, n = 60) => { s = String(s); return s.length > n ? s.slice(0, n) + '…' : s; };
 
-    // ---------- core math ----------
-    suite('core/math');
-    check('gcd(48,18) = 6', () => eq(m.gcd(48, 18), 6));
-    check('Frac: 1/2 + 1/4 = 3/4', () => eq(m.Frac.of(1,2).add(m.Frac.of(1,4)).toString(), '3/4'));
-    check('Frac exactness: 1/3 * 3 = 1', () => eq(m.Frac.of(1,3).mul(m.Frac.of(3)).toString(), '1'));
-    check('convergents of log2(3/2) include 7/12 and 31/53', () => {
-      const cv = m.convergents(m.continuedFraction(Math.log2(1.5), 8)).map(([p,q]) => `${p}/${q}`);
-      if (!cv.includes('7/12') || !cv.includes('31/53')) throw new Error(cv.join(' '));
-    });
-    check('Pell pairs satisfy p²−2q² = ±1 (BigInt exact)', () => {
-      for (const [p, q] of m.pellPairs(20)) {
-        const v = p * p - 2n * q * q;
-        if (v !== 1n && v !== -1n) throw new Error(`${p},${q} -> ${v}`);
-      }
-    });
-    check('DFT ∘ IDFT roundtrip < 1e-12', () => {
-      const pts = Array.from({ length: 64 }, (_, i) => ({ re: Math.cos(i * 0.3), im: Math.sin(i * 0.7) }));
-      const back = m.idft(m.dft(pts));
-      pts.forEach((p, i) => { near(p.re, back[i].re, 1e-12); near(p.im, back[i].im, 1e-12); });
-    });
-    check('E(3,8) is a rotation of tresillo x..x..x.', () => {
-      const r = m.euclidRhythm(3, 8).map(b => b ? 'x' : '.').join('');
-      const target = 'x..x..x.';
-      const rots = Array.from({ length: 8 }, (_, i) => target.slice(i) + target.slice(0, i));
-      if (!rots.includes(r)) throw new Error(r);
-    });
-    check('E(k,n) is maximally even (≤2 gap sizes, differ by 1)', () => {
-      for (let n = 2; n <= 16; n++) for (let k = 1; k < n; k++) {
-        const hits = [];
-        m.euclidRhythm(k, n).forEach((b, i) => b && hits.push(i));
-        const gaps = hits.map((h, i) => ((hits[(i + 1) % hits.length] - h) + n) % n || n);
-        const kinds = [...new Set(gaps)].sort((a, b) => a - b);
-        if (kinds.length > 2 || (kinds.length === 2 && kinds[1] - kinds[0] !== 1)) throw new Error(`E(${k},${n})`);
-      }
-    });
-    check('1/3 terminates in base 60 (;20), repeats in base 10', () => {
-      const b60 = m.baseExpansion(1, 3, 60);
-      const b10 = m.baseExpansion(1, 3, 10, 12);
-      if (!b60.terminates || b60.digits[0] !== 20) throw new Error(JSON.stringify(b60));
-      if (b10.terminates) throw new Error('1/3 should not terminate in base 10');
-    });
-    check('regular numbers: 48 yes, 42 no', () => { eq(m.isRegular(48), true); eq(m.isRegular(42), false); });
-    check('ordinal CNF prints and compares', () => {
-      const o = m.ordSumOfOmegaPows([{ terms: [[1, 1]] }, 1, 1, 0, 0, 0]);   // ω^ω + ω·2 + 3
-      eq(m.ordToString(o), 'ω^ω + ω·2 + 3');
-      eq(m.ordCmp(o, 5), 1);
-      eq(m.ordCmp(3, o), -1);
-    });
-    check('cents(3/2) ≈ 701.955', () => near(m.cents(1.5), 701.955, 0.001));
-
-    // ---------- exhibit modules: shape ----------
-    suite('exhibit modules (contract shape)');
-    const loaded = {};
-    for (const entry of MANIFEST) {
-      await checkAsync(`${entry.id} imports; id/movement/init/prose valid`, async () => {
-        const mod = await import(entry.path.replace('./', './js/'));
-        loaded[entry.id] = mod;
-        eq(mod.default.id, entry.id);
-        eq(mod.default.movement, entry.movement);
-        if (typeof mod.default.init !== 'function') throw new Error('init missing');
-        if (typeof mod.default.prose !== 'string' || mod.default.prose.length < 200)
-          throw new Error('prose missing/short');
+    try {
+      // ---------- core math ----------
+      suite('core/math');
+      check('gcd(48,18) = 6', () => eq(m.gcd(48, 18), 6));
+      check('Frac: 1/2 + 1/4 = 3/4', () => eq(m.Frac.of(1,2).add(m.Frac.of(1,4)).toString(), '3/4'));
+      check('Frac exactness: 1/3 * 3 = 1', () => eq(m.Frac.of(1,3).mul(m.Frac.of(3)).toString(), '1'));
+      check('convergents of log2(3/2) include 7/12 and 31/53', () => {
+        const cv = m.convergents(m.continuedFraction(Math.log2(1.5), 8)).map(([p,q]) => `${p}/${q}`);
+        if (!cv.includes('7/12') || !cv.includes('31/53')) throw new Error(cv.join(' '));
       });
-    }
-
-    // ---------- exhibit deep tests (filled in as modules land) ----------
-    suite('exhibit logic (_test hooks)');
-    for (const entry of MANIFEST) {
-      const mod = loaded[entry.id];
-      if (!mod) continue;
-      if (mod._test && typeof mod._test.selfTest === 'function') {
-        await checkAsync(`${entry.id}._test.selfTest()`, () => mod._test.selfTest());
-      }
-    }
-    // Integrator-authored deep assertions:
-    if (loaded.rosetta?. _test?.pointCountAp && loaded.rosetta?._test?.etaCoefficients) {
-      await checkAsync('rosetta: a_p anchors a2=−2 a3=−1 a5=1 a7=−2', async () => {
-        const T = loaded.rosetta._test;
-        const eta = T.etaCoefficients(10);
-        eq(T.pointCountAp(2), -2); eq(T.pointCountAp(3), -1);
-        eq(T.pointCountAp(5), 1); eq(T.pointCountAp(7), -2);
-        eq(eta[2], -2); eq(eta[3], -1); eq(eta[5], 1); eq(eta[7], -2);
+      check('Pell pairs satisfy p²−2q² = ±1 (BigInt exact)', () => {
+        for (const [p, q] of m.pellPairs(20)) {
+          const v = p * p - 2n * q * q;
+          if (v !== 1n && v !== -1n) throw new Error(`${p},${q} -> ${v}`);
+        }
       });
+      check('DFT ∘ IDFT roundtrip < 1e-12', () => {
+        const pts = Array.from({ length: 64 }, (_, i) => ({ re: Math.cos(i * 0.3), im: Math.sin(i * 0.7) }));
+        const back = m.idft(m.dft(pts));
+        pts.forEach((p, i) => { near(p.re, back[i].re, 1e-12); near(p.im, back[i].im, 1e-12); });
+      });
+      check('E(3,8) is a rotation of tresillo x..x..x.', () => {
+        const r = m.euclidRhythm(3, 8).map(b => b ? 'x' : '.').join('');
+        const target = 'x..x..x.';
+        const rots = Array.from({ length: 8 }, (_, i) => target.slice(i) + target.slice(0, i));
+        if (!rots.includes(r)) throw new Error(r);
+      });
+      check('E(k,n) is maximally even (≤2 gap sizes, differ by 1)', () => {
+        for (let n = 2; n <= 16; n++) for (let k = 1; k < n; k++) {
+          const hits = [];
+          m.euclidRhythm(k, n).forEach((b, i) => b && hits.push(i));
+          const gaps = hits.map((h, i) => ((hits[(i + 1) % hits.length] - h) + n) % n || n);
+          const kinds = [...new Set(gaps)].sort((a, b) => a - b);
+          if (kinds.length > 2 || (kinds.length === 2 && kinds[1] - kinds[0] !== 1)) throw new Error(`E(${k},${n})`);
+        }
+      });
+      check('1/3 terminates in base 60 (;20), repeats in base 10', () => {
+        const b60 = m.baseExpansion(1, 3, 60);
+        const b10 = m.baseExpansion(1, 3, 10, 12);
+        if (!b60.terminates || b60.digits[0] !== 20) throw new Error(JSON.stringify(b60));
+        if (b10.terminates) throw new Error('1/3 should not terminate in base 10');
+      });
+      check('regular numbers: 48 yes, 42 no', () => { eq(m.isRegular(48), true); eq(m.isRegular(42), false); });
+      check('ordinal CNF prints and compares', () => {
+        const o = m.ordSumOfOmegaPows([{ terms: [[1, 1]] }, 1, 1, 0, 0, 0]);   // ω^ω + ω·2 + 3
+        eq(m.ordToString(o), 'ω^ω + ω·2 + 3');
+        eq(m.ordCmp(o, 5), 1);
+        eq(m.ordCmp(3, o), -1);
+      });
+      check('cents(3/2) ≈ 701.955', () => near(m.cents(1.5), 701.955, 0.001));
+
+      // ---------- manifest integrity (contract v2) ----------
+      suite('manifest (contract v2)');
+      const ids = MANIFEST.map((e) => e.id);
+      check(`${MANIFEST.length} entries, every id unique`, () => {
+        const seen = new Set(), dup = [];
+        for (const id of ids) { if (seen.has(id)) dup.push(id); seen.add(id); }
+        if (dup.length) throw new Error('duplicate ids: ' + dup.join(', '));
+      });
+      check('every entry has path, id, movement ∈ {1,2,3,4}, title, hook', () => {
+        const p = problems();
+        for (const e of MANIFEST) {
+          if (!isStr(e.id)) p.add('an entry has no id');
+          if (!isStr(e.path) || !/^\.\/exhibits\/[a-z]+\/[a-z0-9-]+\.js$/.test(e.path)) p.add(`${e.id}: bad path ${e.path}`);
+          if (![1, 2, 3, 4].includes(e.movement)) p.add(`${e.id}: movement ${e.movement}`);
+          if (!isStr(e.title)) p.add(`${e.id}: no title`);
+          if (!isStr(e.hook)) p.add(`${e.id}: no hook`);
+        }
+        p.done();
+      });
+      check('movements run in order I → IV', () => {
+        for (let i = 1; i < MANIFEST.length; i++)
+          if (MANIFEST[i].movement < MANIFEST[i - 1].movement) throw new Error(`${MANIFEST[i].id} (movement ${MANIFEST[i].movement}) follows movement ${MANIFEST[i - 1].movement}`);
+      });
+      check('every movement 1–4 has at least one exhibit', () => {
+        for (const mv of [1, 2, 3, 4]) if (!MANIFEST.some((e) => e.movement === mv && !e.coda)) throw new Error(`movement ${mv} is empty`);
+      });
+      check('exactly one coda entry, and it is last', () => {
+        const codas = MANIFEST.filter((e) => e.coda);
+        eq(codas.length, 1);
+        eq(MANIFEST[MANIFEST.length - 1].coda, true);
+      });
+      check('Movement IV exhibits live in exhibits/engines/', () => {
+        const p = problems();
+        for (const e of MANIFEST) if (e.movement === 4 && !e.coda && !e.path.startsWith('./exhibits/engines/')) p.add(`${e.id}: ${e.path}`);
+        p.done();
+      });
+
+      // ---------- exhibit modules: shape ----------
+      suite('exhibit modules (contract shape)');
+      const loaded = {};
+      for (const entry of MANIFEST) {
+        await checkAsync(`${entry.id} imports; id/movement/init/prose valid`, async () => {
+          const mod = await import(entry.path.replace('./', './js/'));
+          if (!mod.default) throw new Error('no default export');
+          loaded[entry.id] = mod;
+          eq(mod.default.id, entry.id);
+          eq(mod.default.movement, entry.movement);
+          if (typeof mod.default.init !== 'function') throw new Error('init missing');
+          if (typeof mod.default.prose !== 'string' || mod.default.prose.length < 200)
+            throw new Error('prose missing/short');
+        });
+      }
+
+      // ---------- manifest ↔ module sync ----------
+      suite('manifest ↔ module titles and hooks (integrator syncs)');
+      for (const entry of MANIFEST) {
+        const mod = loaded[entry.id];
+        if (!mod?.default) continue;
+        check(`${entry.id}: manifest title/hook match the module`, () => {
+          const p = problems(), d = mod.default;
+          if (d.title !== entry.title) p.add(`title: module “${short(d.title)}” ≠ manifest “${short(entry.title)}”`);
+          if (d.hook !== entry.hook) p.add(`hook: module “${short(d.hook, 90)}” ≠ manifest “${short(entry.hook, 90)}”`);
+          p.done();
+        });
+      }
+
+      // ---------- prose v2 ----------
+      suite('prose (v2: opens on a plain letter, 3–7 paragraphs)');
+      for (const entry of MANIFEST) {
+        const mod = loaded[entry.id];
+        if (typeof mod?.default?.prose !== 'string') continue;
+        check(`${entry.id}: prose opens <p> + a letter`, () => {
+          const s = mod.default.prose.trimStart();
+          const mm = /^<p(?:\s[^>]*)?>\s*([\s\S])/u.exec(s);
+          if (!mm) throw new Error(`must start with <p>, starts with “${short(s, 24)}”`);
+          if (!/\p{L}/u.test(mm[1])) throw new Error(`first character after <p> is “${short(s.slice(mm[0].length - 1), 24)}”, not a letter`);
+        });
+        check(`${entry.id}: 3–7 paragraphs`, () => {
+          const n = (mod.default.prose.match(/<p(?:\s[^>]*)?>/g) || []).length;
+          if (n < 3 || n > 7) throw new Error(`${n} paragraphs`);
+        });
+      }
+
+      // ---------- metadata v2 ----------
+      suite('exhibit metadata (v2: era, chronicle, today, sources, alt)');
+      const ARC_START = -43050, NOW = 2026;       // the Long Arc's span: 45,000 BP … 2026
+      function metaIssues(d, required) {
+        const p = [];
+        const need = (k) => required && d[k] == null && p.push(`${k} missing`);
+        need('era'); need('chronicle'); need('today'); need('sources');
+        if (d.era != null) {
+          if (!isStr(d.era)) p.push('era must be a non-empty string');
+          else if (d.era.length > 80) p.push(`era is ${d.era.length} chars (≲ 70)`);
+        }
+        if (d.chronicle != null) {
+          if (!Array.isArray(d.chronicle)) p.push('chronicle must be an array');
+          else d.chronicle.forEach((c, i) => {
+            if (!c || typeof c !== 'object') { p.push(`chronicle[${i}] not an object`); return; }
+            if (typeof c.year !== 'number' || !Number.isFinite(c.year)) p.push(`chronicle[${i}].year not a finite number`);
+            else if (c.year > NOW) p.push(`chronicle[${i}].year ${c.year} is after ${NOW}`);
+            else if (c.year < ARC_START) p.push(`chronicle[${i}].year ${c.year} is before the Long Arc (45,000 BP)`);
+            if (!isStr(c.date)) p.push(`chronicle[${i}].date missing`);
+            if (!isStr(c.text)) p.push(`chronicle[${i}].text missing`);
+            else if (/this exhibit/i.test(c.text)) p.push(`chronicle[${i}].text says “this exhibit” (must read out of context)`);
+          });
+        }
+        if (d.today != null) {
+          if (!isStr(d.today)) p.push('today must be a non-empty HTML string');
+          else if (!/<p[\s>]/.test(d.today)) p.push('today should be <p> paragraphs');
+        }
+        if (d.sources != null) {
+          if (!Array.isArray(d.sources)) p.push('sources must be an array');
+          else d.sources.forEach((s, i) => {
+            if (!s || typeof s !== 'object') { p.push(`sources[${i}] not an object`); return; }
+            if (!isStr(s.text)) p.push(`sources[${i}].text missing`);
+            if (s.url != null && !(typeof s.url === 'string' && /^https:\/\/[^\s]+$/.test(s.url))) p.push(`sources[${i}].url must be https: ${short(s.url, 40)}`);
+          });
+        }
+        if (d.alt != null && !isStr(d.alt)) p.push('alt must be a non-empty string');
+        return p;
+      }
+      // The Long Arc places each event by its numeric year, the reader sees the printed
+      // date: the two must agree. Centuries (“5th c. BCE”) are too coarse to test.
+      function yearVsDate(c) {
+        const d = String(c.date || '').replace(/&nbsp;|\u00a0/g, ' ');
+        const nums = [...d.matchAll(/\d[\d,]*/g)].map((x) => +x[0].replace(/,/g, '')).filter((x) => x > 0);
+        if (/\b\d+(st|nd|rd|th)\b/.test(d) || !nums.length || !Number.isFinite(c.year)) return null;
+        if (/\bBP\b/.test(d)) {
+          const want = 1950 - Math.max(...nums);
+          return Math.abs(c.year - want) > 60 ? `year ${c.year}, but ${Math.max(...nums)} BP is ${want}` : null;
+        }
+        const bce = /BCE/.test(d);
+        const yrs = nums.filter((x) => bce || x >= 100);
+        if (!yrs.length) return null;
+        let lo = Math.min(...yrs), hi = Math.max(...yrs);
+        if (bce) [lo, hi] = [-hi, -lo];
+        if (/\d0s\b/.test(d)) hi += 9;
+        return c.year < lo - 1 || c.year > hi + 1 ? `year ${c.year} lies outside ${lo}…${hi}` : null;
+      }
+      for (const entry of MANIFEST) {
+        const mod = loaded[entry.id];
+        if (!mod?.default) continue;
+        const d = mod.default;
+        check(`${entry.id}: metadata shape${entry.coda ? ' (optional for the coda)' : ''}`, () => {
+          const p = metaIssues(d, !entry.coda);
+          if (p.length) throw new Error(p.join('; '));
+        });
+        if (!entry.coda && Array.isArray(d.chronicle) && Array.isArray(d.sources)) {
+          check(`${entry.id}: counts within contract (chronicle 4–8, sources 4–10)`, () => {
+            const p = problems();
+            if (d.chronicle.length < 4 || d.chronicle.length > 8) p.add(`chronicle has ${d.chronicle.length}`);
+            if (d.sources.length < 4 || d.sources.length > 10) p.add(`sources has ${d.sources.length}`);
+            p.done();
+          });
+        }
+        if (Array.isArray(d.chronicle) && d.chronicle.length) {
+          check(`${entry.id}: each chronicle year agrees with its printed date`, () => {
+            const p = problems();
+            d.chronicle.forEach((c, i) => { const why = c && yearVsDate(c); if (why) p.add(`[${i}] “${short(c.date, 30)}”: ${why}`); });
+            p.done();
+          });
+        }
+      }
+
+      // ---------- content.js ----------
+      suite('content.js (shell contract)');
+      let C = null;
+      await checkAsync('content.js imports with site, movements, interludes, motifs, longArc, colophon, footer', async () => {
+        C = await import('./js/content.js');
+        const p = problems();
+        for (const k of ['site', 'movements', 'interludes', 'motifs', 'longArc', 'colophon', 'footer'])
+          if (C[k] == null) p.add(`${k} missing`);
+        p.done();
+      });
+      if (C) {
+        check('site has title, subtitle, howToRead', () => {
+          const p = problems();
+          for (const k of ['title', 'subtitle', 'howToRead']) if (!isStr(C.site?.[k])) p.add(`site.${k}`);
+          p.done();
+        });
+        check('movements 1–4 each have numeral, title, epigraph, lede (epigraphCite optional)', () => {
+          const p = problems();
+          for (const mv of [1, 2, 3, 4]) {
+            const x = C.movements?.[mv];
+            if (!x) { p.add(`movement ${mv} missing`); continue; }
+            for (const k of ['numeral', 'title', 'epigraph', 'lede']) if (!isStr(x[k])) p.add(`${mv}.${k}`);
+            if (x.epigraphCite != null && !isStr(x.epigraphCite)) p.add(`${mv}.epigraphCite`);
+          }
+          p.done();
+        });
+        check('an interlude follows every exhibit but the coda', () => {
+          const p = problems();
+          for (const e of MANIFEST) if (!e.coda && !isStr(C.interludes?.[e.id])) p.add(`no interlude after ${e.id}`);
+          for (const k of Object.keys(C.interludes || {})) {
+            if (!ids.includes(k)) p.add(`interlude keyed by unknown id “${k}”`);
+            const e = MANIFEST.find((x) => x.id === k);
+            if (e && e.coda) p.add('an interlude follows the coda');
+          }
+          p.done();
+        });
+        check('motifs: 14–18, well-formed, real ids, each shared by ≥ 3 exhibits', () => {
+          const p = problems(), keys = new Set();
+          if (!Array.isArray(C.motifs)) throw new Error('motifs must be an array');
+          if (C.motifs.length < 14 || C.motifs.length > 18) p.add(`${C.motifs.length} motifs`);
+          for (const mo of C.motifs) {
+            const k = mo?.key;
+            if (!isStr(k)) { p.add('a motif has no key'); continue; }
+            if (keys.has(k)) p.add(`duplicate key ${k}`); keys.add(k);
+            for (const f of ['glyph', 'label', 'note']) if (!isStr(mo[f])) p.add(`${k}.${f}`);
+            if (!['gold', 'azure', 'crimson', 'verdigris'].includes(mo.pigment)) p.add(`${k}.pigment “${mo.pigment}”`);
+            if (!Array.isArray(mo.ids)) { p.add(`${k}.ids`); continue; }
+            if (new Set(mo.ids).size !== mo.ids.length) p.add(`${k}: repeated id`);
+            if (mo.ids.length < 3) p.add(`${k}: only ${mo.ids.length} exhibits`);
+            for (const id of mo.ids) if (!ids.includes(id)) p.add(`${k}: unknown id ${id}`);
+            if (/<[^>]+>/.test(mo.note || '')) p.add(`${k}.note should be plain text`);
+          }
+          p.done();
+        });
+        check('content.js typography: curly quotes, no exclamation marks, no spaced hyphens', () => {
+          const p = problems();
+          const walk = (v, path) => {
+            if (typeof v === 'string') {
+              const t = v.replace(/<[^>]+>/g, '');
+              if (/['"]/.test(t)) p.add(`${path}: straight quote near “${short(t.slice(Math.max(0, t.search(/['"]/) - 20)), 40)}”`);
+              if (/!/.test(t)) p.add(`${path}: exclamation mark`);
+              if (/\s-\s/.test(t)) p.add(`${path}: spaced hyphen (use an en or em dash)`);
+            } else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) walk(x, `${path}.${k}`);
+          };
+          walk({ site: C.site, movements: C.movements, interludes: C.interludes, motifs: C.motifs, longArc: C.longArc, colophon: C.colophon, footer: C.footer }, 'content');
+          p.done();
+        });
+        check('echo chips: at most five under any one exhibit', () => {
+          const p = problems(), n = {};
+          for (const mo of C.motifs || []) for (const id of mo.ids || []) n[id] = (n[id] || 0) + 1;
+          for (const [id, k] of Object.entries(n)) if (k > 5) p.add(`${id} carries ${k}`);
+          p.done();
+        });
+        check('longArc, colophon and footer are present', () => {
+          const p = problems();
+          if (!isStr(C.longArc?.title)) p.add('longArc.title');
+          if (!isStr(C.longArc?.lede)) p.add('longArc.lede');
+          if (!isStr(C.colophon)) p.add('colophon');
+          if (!isStr(C.footer)) p.add('footer');
+          p.done();
+        });
+      }
+
+      // ---------- cross-links ----------
+      suite('cross-links (#ex-… anchors point at real exhibits)');
+      check('every #ex-<id> link in prose, metadata and content resolves', () => {
+        const p = problems();
+        const scan = (where, html) => {
+          if (typeof html !== 'string') return;
+          for (const mm of html.matchAll(/href=["']#ex-([a-z0-9-]+)["']/g))
+            if (!ids.includes(mm[1])) p.add(`${where} → #ex-${mm[1]}`);
+        };
+        for (const e of MANIFEST) {
+          const d = loaded[e.id]?.default;
+          if (!d) continue;
+          scan(`${e.id}.prose`, d.prose); scan(`${e.id}.today`, d.today);
+          (Array.isArray(d.chronicle) ? d.chronicle : []).forEach((c, i) => scan(`${e.id}.chronicle[${i}]`, c?.text));
+        }
+        if (C) {
+          for (const mv of [1, 2, 3, 4]) scan(`movement ${mv} lede`, C.movements?.[mv]?.lede);
+          for (const [k, v] of Object.entries(C.interludes || {})) scan(`interlude ${k}`, v);
+          scan('colophon', C.colophon); scan('howToRead', C.site?.howToRead);
+        }
+        p.done();
+      });
+
+      // ---------- exhibit deep tests (filled in as modules land) ----------
+      suite('exhibit logic (_test hooks)');
+      for (const entry of MANIFEST) {
+        const mod = loaded[entry.id];
+        if (!mod) continue;
+        if (mod._test && typeof mod._test.selfTest === 'function') {
+          await checkAsync(`${entry.id}._test.selfTest()`, () => mod._test.selfTest());
+        }
+      }
+      // Integrator-authored deep assertions:
+      // (the a_p counter was called pointCountAp in the plan and apFromCount in the build)
+      const rosettaAp = loaded.rosetta?._test?.pointCountAp || loaded.rosetta?._test?.apFromCount;
+      if (rosettaAp && loaded.rosetta?._test?.etaCoefficients) {
+        await checkAsync('rosetta: a_p anchors a2=−2 a3=−1 a5=1 a7=−2', async () => {
+          const T = loaded.rosetta._test;
+          const eta = T.etaCoefficients(10);
+          eq(rosettaAp(2), -2); eq(rosettaAp(3), -1);
+          eq(rosettaAp(5), 1); eq(rosettaAp(7), -2);
+          eq(eta[2], -2); eq(eta[3], -1); eq(eta[5], 1); eq(eta[7], -2);
+        });
+      }
+
+      // ---------- facts in the prose, recomputed independently ----------
+      // Each number below is printed somewhere in the essay. It is recomputed
+      // here from first principles, then compared with the module that shows it.
+      suite('numbers in the prose, recomputed independently');
+      const curveCount = (p, b) => {                       // points of y² = x³ + b over 𝔽p, with ∞
+        let n = 1;
+        for (let x = 0; x < p; x++) for (let y = 0; y < p; y++) if ((y * y - x * x * x - b) % p === 0) n++;
+        return n;
+      };
+      check('y² = x³ + 7 over 𝔽97 has 79 points with ∞, inside Hasse’s window (The Handshake)', () => {
+        const n = curveCount(97, 7);
+        eq(n, 79);
+        if (Math.abs(n - 98) > 2 * Math.sqrt(97)) throw new Error('outside Hasse');
+      });
+      await checkAsync('y² = x³ + 7 over 𝔽421 has 444 points with ∞ (Movement IV backdrop)', async () => {
+        const { curvePoints } = await import('./js/shell/backdrops.js');
+        eq(curveCount(421, 7), 444);
+        eq(curvePoints(421, 7).count, 444);
+      });
+      if (loaded.shor?._test) check('7ˣ mod 15 has period 4; 48 × 50 splits 15 as 3 × 5; Shor’s c = 77 of 256 gives [0; 3, 3, 12, 2] and r = 10', () => {
+        const T = loaded.shor._test;
+        const orb = [1]; while (orb.length < 20) { const v = (orb[orb.length - 1] * 7) % 15; if (v === 1) break; orb.push(v); }
+        eq(orb.join(','), '1,7,4,13'); eq(T.order(7, 15), 4);
+        const f = T.factorFromPeriod(7, 4, 15); eq([f.f1, f.f2].sort((a, b) => a - b).join(','), '3,5');
+        eq(T.cfOfRatio(77, 256).terms.join(','), '0,3,3,12,2');
+        eq(T.recoverPeriod(77, 256, 33, 5).r, 10);
+      });
+      if (loaded.selfheal?._test) check('Hamming’s own example: twelve is 0111100, and spoiling the fifth digit gives checking number 101 = 5', () => {
+        const T = loaded.selfheal._test, w = T.hammingEncode(12);
+        eq(w.slice(1).join(''), '0111100');
+        w[5] ^= 1;
+        let s = 0; for (let q = 1; q <= 7; q++) if (w[q]) s ^= q;      // independent XOR of positions
+        eq(s, 5); eq(T.syndrome(w), 5);
+      });
+      if (loaded.eigen?._test) check('Moler’s six-page web at d = 0.85: A, D, F settle at 0.321, 0.137, 0.201', () => {
+        const E = loaded.eigen._test.MOLER_EDGES, n = 6, out = Array.from({ length: n }, () => []);
+        for (const [a, b] of E) out[a].push(b);
+        let x = new Array(n).fill(1 / n);
+        for (let k = 0; k < 400; k++) {
+          const y = new Array(n).fill(0.15 / n);
+          for (let j = 0; j < n; j++) {                     // a page with no links (E) links everywhere
+            if (!out[j].length) for (let i = 0; i < n; i++) y[i] += 0.85 * x[j] / n;
+            else for (const i of out[j]) y[i] += 0.85 * x[j] / out[j].length;
+          }
+          x = y;
+        }
+        eq(x[0].toFixed(3), '0.321'); eq(x[3].toFixed(3), '0.137'); eq(x[5].toFixed(3), '0.201');
+      });
+      if (loaded.whereami?._test) check('GPS clocks: +38.6 μs a day, 11.6 km of light (Ashby’s constants; the Movement IV lede)', () => {
+        const GM = 3.986004418e14, c = 299792458, a = 26561.75e3, phi0 = -6.9693e-10;
+        const net = -(3 * GM) / (2 * a * c * c) - phi0;     // Ashby 2003, circular orbit vs the geoid
+        near(net * 86400e6, 38.6, 0.05);
+        near(net * 86400 * c / 1000, 11.6, 0.05);
+        near(loaded.whereami._test.clockRate().net, net, 1e-14);
+      });
+      if (loaded.lossy?._test) check('JPEG’s 8×8 DCT is orthonormal: round trip exact, energy conserved (Parseval)', () => {
+        const T = loaded.lossy._test, s = new Float64Array(64).map((_, i) => 100 * Math.sin(i * 1.7) + i);
+        const S = T.fdct8(s), back = T.idct8(S);
+        let e1 = 0, e2 = 0;
+        for (let i = 0; i < 64; i++) { near(back[i], s[i], 1e-9); e1 += s[i] * s[i]; e2 += S[i] * S[i]; }
+        near(e1, e2, 1e-6 * e1);
+      });
+      if (loaded.golden?._test) check('The Fibonacci word 01001010…, and at most three gaps at the golden angle, two exactly at Fibonacci counts (The Golden Angle)', () => {
+        const T = loaded.golden._test, p = problems();
+        let w = '0';                                         // 0 → 01, 1 → 0, done here as strings
+        while (w.length < 3000) w = w.replace(/[01]/g, (c) => (c === '0' ? '01' : '0'));
+        w = w.slice(0, 3000);
+        eq(w.slice(0, 8), '01001010');
+        if (T.fibWord(3000).join('') !== w) p.add('fibWord differs from the substitution');
+        if (T.fibSubstitution(3000).join('') !== w) p.add('fibSubstitution differs');
+        near(T.GOLDEN_DEG, 137.50776, 5e-6);
+        const g = 2 - (1 + Math.sqrt(5)) / 2;
+        const fib = new Set([2, 3, 5, 8, 13, 21, 34, 55, 89, 144, 233, 377, 610]);
+        for (let n = 2; n <= 610; n++) {
+          const s = Array.from({ length: n }, (_, i) => (i * g) % 1).sort((a, b) => a - b);
+          const kinds = [];
+          s.forEach((x, i) => {
+            const d = (i + 1 < n ? s[i + 1] : s[0] + 1) - x;
+            if (!kinds.some((k) => Math.abs(k - d) < 1e-9)) kinds.push(d);
+          });
+          kinds.sort((a, b) => b - a);
+          if (kinds.length > 3) p.add(`n = ${n}: ${kinds.length} gap sizes`);
+          if ((kinds.length === 2) !== fib.has(n)) p.add(`n = ${n}: ${kinds.length} gap sizes`);
+          if (kinds.length === 3 && Math.abs(kinds[0] - kinds[1] - kinds[2]) > 1e-9) p.add(`n = ${n}: the largest gap is not the sum of the others`);
+          if (T.gapSizes(g, n).length !== kinds.length) p.add(`n = ${n}: gapSizes disagrees`);
+        }
+        p.done();
+      });
+
+      // ---------- _test exports the shell depends on (never rename or remove) ----------
+      suite('shell dependencies on exhibit _test exports');
+      check('sixty._test.PLIMPTON_ROWS: 15 rows (Movement I backdrop)', () => {
+        const R = loaded.sixty?._test?.PLIMPTON_ROWS;
+        if (!Array.isArray(R)) throw new Error('missing');
+        eq(R.length, 15);
+      });
+      check('chladni._test.modeW and modeGrad (Movement II backdrop)', () => {
+        const T = loaded.chladni?._test;
+        if (typeof T?.modeW !== 'function' || typeof T?.modeGrad !== 'function') throw new Error('missing');
+      });
+      check('rosetta._test.etaCoefficients and an a_p counter (tests)', () => {
+        const T = loaded.rosetta?._test;
+        if (typeof T?.etaCoefficients !== 'function') throw new Error('etaCoefficients missing');
+        if (typeof (T.pointCountAp || T.apFromCount) !== 'function') throw new Error('apFromCount missing');
+      });
+    } catch (e) {
+      check('the test run itself completes', () => { throw e; });
     }
 
     document.getElementById('summary').textContent =

@@ -151,3 +151,132 @@ not pointer-move).
    `node -e "import('./docs/js/exhibits/<m>/<name>.js').then(m=>console.log(m.default.id))"`.
    (Browser check may be impossible in parallel — the integrator runs a full
    drive-through afterwards. Code defensively.)
+
+---
+
+# CONTRACT v2 — the expansion (September 2026)
+
+Everything above still holds. This section adds to it; where the two disagree, v2 wins.
+
+## What changed
+
+- **Four movements and a coda.** I · Origins, II · Resonance, III · Horizon, and the new
+  **IV · Engines** (`docs/js/exhibits/engines/`): the unreasonable effectiveness of
+  mathematics, where the pure ideas of I–III now run the modern world. The Coda follows
+  Movement IV. Its manifest entry carries `coda: true, bare: true` and `movement: 4`, and
+  the shell numbers it "Coda" instead of "IV · 8".
+- **Per-exhibit apparatus.** Exhibit modules export optional *data* (below). The shell
+  renders it in one consistent house style: an era rubric in the header, and after the stage
+  a chronicle strip, a "where it lives now" panel, echo chips, and collapsible sources.
+  **Exhibits never render these themselves.**
+- **The shell layer** (`docs/js/shell/*.js` + `css/main.css`) adds the sky (Gaussian-prime
+  starfield), rose-curve fleurons, the overture emblem, one computed backdrop per movement,
+  plate framing for stages, illuminated initials, the Long Arc timeline, rail labels, a
+  contents dialog, a progress hairline, scroll reveals, and accessibility fixes.
+- **Palette additions** (backward-compatible): `palette.verdigris = '#62b3a4'` (Movement IV
+  and the "today" panel), `palette.crimsonBright = '#d97a68'` (crimson as small text),
+  `palette.inkGhost = '#4a4840'` (decorative only). CSS tokens `--mv-1 … --mv-4` give each
+  movement its pigment: gold leaf, azurite, vermilion, verdigris.
+
+## Module metadata (all optional; plain data, no DOM, importable under node)
+
+```js
+export default {
+  id, movement, title, hook, prose, init,          // as before
+  era: 'c. 1900–1600 BCE · Larsa and the Old Babylonian schools',
+  chronicle: [
+    { year: -1800, date: 'c. 1800 BCE', text: 'One sentence; may use <em>…</em>.' },
+    // 4–8 entries, VERIFIED, spanning origin → present. `year` is a number:
+    // negative = BCE (1 BCE = 0 is NOT used; write -1 for 1 BCE), BP → -(BP − 1950).
+    // Never later than 2026. `date` is the display string (can say "c.", "1850s", "June 2024").
+  ],
+  today: `<p>…</p>`,     // 1–3 short <p>: where this idea lives now (applications, instruments,
+                         // the live research frontier as of 2026). Verified, concrete, no hype.
+  sources: [
+    { text: 'Eleanor Robson, <em>Mathematics in Ancient Iraq</em> (2008)', url: 'https://…' },
+    // 4–10 real, reputable items; url optional but https only.
+  ],
+  alt: 'One sentence describing what the stage shows, for screen readers.',
+};
+```
+
+- `era` is short (≲ 70 characters). It is set as an italic rubric beside the exhibit number.
+- The chronicle entries also feed the site-wide **Long Arc** timeline, so every `text` must
+  make sense out of context, name its actors and avoid "this exhibit".
+- `today` is not a second copy of the prose. It is the bridge from the idea to the present, and
+  for Movements I–III it may point forward to a Movement IV exhibit with
+  `<a href="#ex-lossy">…</a>`.
+- Keep every existing `_test` export. The shell's backdrops import
+  `sixty._test.PLIMPTON_ROWS` and `chladni._test.modeW / modeGrad`, and tests.html uses
+  `rosetta._test.pointCountAp / etaCoefficients`. You may add to `_test`, but never rename
+  or remove anything from it.
+
+## Prose, v2
+
+- 3–7 paragraphs. **The first character of `prose` must be a plain letter.** The shell sets
+  an illuminated initial on it and small caps on the first line, so do not open with `<code>`,
+  a digit, a quotation mark, or `<em>`.
+- Use curly typography in new text: ’ “ ” — – × −.
+- Aim for peak aesthetic, which means exactness first. Use concrete images, real names, places,
+  artifacts and dates, and short verified quotations with attribution. Vary the rhythm. No hype
+  words, no exclamation marks, no bullet lists, no headings.
+- Every claim must be verified: myths go in `ui.legendPanel`, conjecture in
+  `ui.speculationPanel`. If you cannot verify something, leave it out.
+- Cross-links to other exhibits (`<a href="#ex-<id>">`) are welcome but sparing, at most
+  two or three per exhibit.
+
+## Stage, v2
+
+- **Movement colour.** An exhibit may read its movement pigment from CSS: inside the section,
+  `getComputedStyle(sec).getPropertyValue('--mv')`. Movement IV canvases use
+  `palette.verdigris` as their accent, alongside gold, azure and crimson.
+- **Mobile.** At 360 px viewport width the stage must not cause horizontal page scroll.
+  Canvases fit their width, controls wrap, and readouts wrap: the shell sets
+  `.readout { white-space: pre-wrap }`. Check with the harness (`--width 390 --mobile`).
+- **Motion.** Purely decorative motion respects `prefers-reduced-motion: reduce`. A
+  computation the visitor starts is content and may animate.
+- **Accessibility.** The `ui.*` helpers are fixed centrally (toggle becomes a real switch
+  button, sliders get names and value text). Canvas-only interactions should get a keyboard
+  or button equivalent where cheap. Provide `alt`.
+- The performance budget is unchanged: free when paused, under ~2 ms per idle frame,
+  glow sprites rather than per-particle `shadowBlur`.
+
+## content.js exports (shell contract between the narrative and visual shell owners)
+
+```js
+export const site = { title, subtitle, howToRead };            // howToRead: HTML, shown in the overture
+export const movements = { 1: { numeral, title, epigraph, epigraphCite?, lede }, …, 4: {…} };
+export const interludes = { <exhibitId>: html };               // rendered after that exhibit
+export const motifs = [ { key, glyph, label, pigment: 'gold'|'azure'|'crimson'|'verdigris', ids: [...], note } ];
+export const longArc = { title, lede };                        // back-matter timeline heading
+export const colophon = html;                                  // "a note on the making", back matter
+export const footer = html;
+```
+
+Manifest entries are `{ path, id, movement, title, hook, coda?, bare? }`. Titles and hooks
+mirror the module exports, and the integrator syncs them at the end.
+
+## Verification harness (use it; it runs its own headless Chrome, so it is parallel-safe)
+
+```sh
+H=/private/tmp/claude-501/-Users-user-cdev-mathemagical/1e348a62-f467-4e33-b6ee-29ab8a6c6d91/scratchpad/harness
+node $H/mm.mjs solo <id> [--path exhibits/engines/<id>.js] --shot /…/out.png [--width 390 --mobile]
+     [--eval "js run in the page; window.__solo.{instance,stage,_test,core,module} available"] [--wait ms]
+node $H/mm.mjs page [--ids a,b] [--shots dir]   # full site, scrolls to each exhibit
+node $H/mm.mjs tests                            # docs/tests.html
+```
+
+`solo` mounts one exhibit without the shell. It prints JSON with the console errors, the
+metadata-shape issues, the lifecycle check (pause/resume), a canvas ink probe and the
+horizontal-overflow state. Read the PNG it writes: look at your own work.
+
+## File ownership during the build
+
+| Owner | Files |
+|---|---|
+| Visual shell | `index.html`, `css/main.css`, `js/main.js`, `js/shell/*` (new), `js/core/ui.js` (a11y only, API unchanged), `js/core/canvas.js` (palette additions and the miniChart label colour only) |
+| Narrative shell | `js/content.js`, `js/manifest.js`, `tests.html`, `README.md` (keep the owner's "Live demo" line) |
+| One editor per exhibit | exactly one `js/exhibits/<movement>/<name>.js` |
+| One builder per new exhibit | exactly one `js/exhibits/engines/<id>.js` |
+
+Nobody touches `js/core/audio.js` or `js/core/math.js`. Put helpers you need in your own file.
